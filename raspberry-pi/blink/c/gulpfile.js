@@ -12,7 +12,7 @@ var config = null;
 
 readConfig();
 
-gulp.task('tools-install', function () {
+gulp.task('install-tools', function () {
 
   // clone repo with azure stuff
   // this currently contains prebuilt libraries for raspbian jessie + set of header files
@@ -73,7 +73,7 @@ var ssh = new simssh({
     });
 
 gulp.task('run', function () {
-  ssh.exec('chmod +x ./blink & ./blink', {
+  ssh.exec('chmod +x ./blink && sudo ./blink', {
     pty: true,
     out: console.log.bind(console)
   }).start();

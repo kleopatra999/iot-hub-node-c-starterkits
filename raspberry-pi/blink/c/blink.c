@@ -7,6 +7,7 @@ const int RED_LED_PIN = 7;
 
 int main(int argc, char *argv[])
 {
+    wiringPiSetup();
     bool on = 1;
     for (;;)
     {
