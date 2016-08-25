@@ -1,7 +1,7 @@
 var config = require('./config.json');
 var gulp = require('gulp');
 var simssh = require('simple-ssh');
-var uploadFiles = require('az-iot-helper-test')
+var uploadFiles = require('az-iot-helper').uploadFiles;
 
 var ssh = new simssh({
   host: config.device_ip_address,
@@ -19,11 +19,10 @@ gulp.task('install-tools', function () {
 });
 
 gulp.task('deploy', function(){
-  uploadFiles(config, ['az-blink.js', 'package.json', 'config.json'], ['az-blink.js', 'package.json', 'config.json'], function(callback){
+  uploadFiles(config, ['az-blink.js', 'package.json', 'config.json'], ['az-blink.js', 'package.json', 'config.json'], function(){
     ssh.exec('npm install', {
       pty: true,
-      out: console.log.bind(console),
-      exit: function() {callback();}
+      out: console.log.bind(console)
     }).start();
   });
 });

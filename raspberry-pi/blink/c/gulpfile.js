@@ -1,6 +1,6 @@
 var config = require('./config.json');
 var gulp = require('gulp');
-var uploadFiles = require('az-iot-helper-test');
+var uploadFiles = require('az-iot-helper').uploadFiles;
 var simssh = require('simple-ssh');
 var request = require('request');
 var source = require('vinyl-source-stream');
@@ -117,9 +117,7 @@ gulp.task('build', function() {
 });
 
 gulp.task('deploy', function(){
-  uploadFiles(config, ['out/' + SAMPLE_NAME, PREBUILT_FOLDER + '/raspbian-jessie-sysroot/usr/lib/libwiringPi.so'], ['./' + SAMPLE_NAME, './libwiringPi.so'], function(callback){
-    callback();
-  });
+  uploadFiles(config, ['out/' + SAMPLE_NAME, PREBUILT_FOLDER + '/raspbian-jessie-sysroot/usr/lib/libwiringPi.so'], ['./' + SAMPLE_NAME, './libwiringPi.so']);
 });
 
 var ssh = new simssh({
@@ -129,7 +127,7 @@ var ssh = new simssh({
     });
 
 gulp.task('run', function () {
-  ssh.exec('chmod +x ./'+ SAMPLE_NAME + ' & ./' + SAMPLE_NAME, {
+  ssh.exec('chmod +x ./'+ SAMPLE_NAME + ' & sudo ./' + SAMPLE_NAME, {
     pty: true,
     out: console.log.bind(console)
   }).start();
