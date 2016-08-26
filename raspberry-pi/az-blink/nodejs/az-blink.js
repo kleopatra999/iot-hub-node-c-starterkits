@@ -8,10 +8,10 @@ var connectionString = 'HostName=' + config.iot_hub_host_name + ';DeviceId=' + c
 var client = clientFromConnectionString(connectionString);
 
 // GPIO pin of the LED
-var configPin = 7;
+var CONFIG_PIN = 7;
 
 wpi.setup('wpi');
-wpi.pinMode(configPin, wpi.OUTPUT);
+wpi.pinMode(CONFIG_PIN, wpi.OUTPUT);
 var isLedOn = false;
 
 function printResultFor(op) {
@@ -30,7 +30,7 @@ var connectCallback = function (err) {
       console.log('Id: ' + msg.messageId + ' Body: ' + msg.data);
       client.complete(msg, printResultFor('completed'));
       isLedOn = !isLedOn;
-      wpi.digitalWrite(configPin, isLedOn ? 1 : 0);
+      wpi.digitalWrite(CONFIG_PIN, isLedOn ? 1 : 0);
     });
   }
 };
