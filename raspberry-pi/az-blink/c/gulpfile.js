@@ -118,7 +118,7 @@ gulp.task('build', function() {
 });
 
 gulp.task('deploy', function(){
-  uploadFiles(config, ['out/' + SAMPLE_NAME, PREBUILT_FOLDER + '/raspbian-jessie-sysroot/usr/lib/libwiringPi.so'], ['./' + SAMPLE_NAME, './libwiringPi.so']);
+  uploadFiles(config, ['out/' + SAMPLE_NAME], ['./' + SAMPLE_NAME]);
 });
 
 var ssh = new simssh({
