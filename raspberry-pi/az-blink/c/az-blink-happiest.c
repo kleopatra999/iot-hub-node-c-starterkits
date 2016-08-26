@@ -1,337 +1,162 @@
 // Copyright (c) Microsoft. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-#include <stdlib.h>
 #include <stdio.h>
-#include <time.h>
-#include <stdint.h>
-//#include <stdbool.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/types.h>
-
-#include "serializer.h"
-#include "azure_c_shared_utility/threadapi.h"
-#include "azure_c_shared_utility/sastoken.h"
-#include "azure_c_shared_utility/platform.h"
-#include "iothub_client.h"
-#include "iothubtransportamqp.h"
-#include "iothub_client_ll.h"
-
-// Sensor and Device Includes
+#include <stdlib.h>
 #include <wiringPi.h>
 #include <wiringPiSPI.h>
-#include "bme280.h"
-#include "locking.h"
+
+#include "azure_c_shared_utility/platform.h"
+#include "azure_c_shared_utility/threadapi.h"
+#include "azure_c_shared_utility/crt_abstractions.h"
+#include "iothub_client.h"
+#include "iothub_message.h"
+#include "iothubtransportamqp.h"
 
 #ifdef MBED_BUILD_TIMESTAMP
 #include "certs.h"
 #endif // MBED_BUILD_TIMESTAMP
 
-const int Spi_channel = 0;
-const int Spi_clock = 1000000L;
-int mcp3008Read(int Analog_in_channel);
-
-const int Red_led_pin = 4;
-const int Grn_led_pin = 5;
-
-/*String containing Hostname, Device Id & Device Key in the format:             */
-/*  "HostName=<host_name>;DeviceId=<device_id>;SharedAccessKey=<device_key>"    */
+/*String containing Hostname, Device Id & Device Key in the format:                         */
+/*  "HostName=<host_name>;DeviceId=<device_id>;SharedAccessKey=<device_key>"                */
+/*  "HostName=<host_name>;DeviceId=<device_id>;SharedAccessSignature=<device_sas_token>"    */
 static const char* connectionString = "";
 
-// Define the Model
-BEGIN_NAMESPACE(WeatherStation);
+static int callbackCounter;
+static bool g_continueRunning;
+static char msgText[1024];
+static char propText[1024];
+#define MESSAGE_COUNT       5
+#define DOWORK_LOOP_NUM     3
 
-DECLARE_MODEL(ContosoAnemometer,
-WITH_DATA(ascii_char_ptr, DeviceId),
-WITH_DATA(ascii_char_ptr, EventTime),
-WITH_DATA(float, MTemperature),
-WITH_ACTION(TurnFanOn),
-WITH_ACTION(TurnFanOff),
-WITH_ACTION(SetAirResistance, int, Position)
-);
+const int RED_LED_PIN = 7;
+bool on = 1;
 
-END_NAMESPACE(WeatherStation);
-
-EXECUTE_COMMAND_RESULT TurnFanOn(ContosoAnemometer* device)
+typedef struct EVENT_INSTANCE_TAG
 {
-	(void)device;
-	(void)printf("Turning Green LED on.\r\n");
-	digitalWrite(Red_led_pin, LOW);
-	digitalWrite(Grn_led_pin, HIGH);
-	return EXECUTE_COMMAND_SUCCESS;
-}
+    IOTHUB_MESSAGE_HANDLE messageHandle;
+    size_t messageTrackingId;  // For tracking the messages within the user callback.
+} EVENT_INSTANCE;
 
-EXECUTE_COMMAND_RESULT TurnFanOff(ContosoAnemometer* device)
+static IOTHUBMESSAGE_DISPOSITION_RESULT ReceiveMessageCallback(IOTHUB_MESSAGE_HANDLE message, void* userContextCallback)
 {
-	(void)device;
-	(void)printf("Turning red LED on.\r\n");
-	digitalWrite(Red_led_pin, HIGH);
-	digitalWrite(Grn_led_pin, LOW);
-	return EXECUTE_COMMAND_SUCCESS;
-}
+    int* counter = (int*)userContextCallback;
+    const unsigned char* buffer = NULL;
+    size_t size = 0;
+    const char* messageId;
+    const char* correlationId;
 
-EXECUTE_COMMAND_RESULT SetAirResistance(ContosoAnemometer* device, int Position)
-{
-    (void)device;
-    (void)printf("Setting Air Resistance Position to %d.\r\n", Position);
-    return EXECUTE_COMMAND_SUCCESS;
-}
-
-void sendCallback(IOTHUB_CLIENT_CONFIRMATION_RESULT result, void* userContextCallback)
-{
-    unsigned int messageTrackingId = (unsigned int)(uintptr_t)userContextCallback;
-
-    (void)printf("Message Id: %u Received.\r\n", messageTrackingId);
-
-    (void)printf("Result Call Back Called! Result is: %s \r\n", ENUM_TO_STRING(IOTHUB_CLIENT_CONFIRMATION_RESULT, result));
-}
-
-
-static void sendMessage(IOTHUB_CLIENT_HANDLE iotHubClientHandle, const unsigned char* buffer, size_t size)
-{
-    static unsigned int messageTrackingId;
-    IOTHUB_MESSAGE_HANDLE messageHandle = IoTHubMessage_CreateFromByteArray(buffer, size);
-    if (messageHandle == NULL)
+    // AMQP message properties
+    if ((messageId = IoTHubMessage_GetMessageId(message)) == NULL)
     {
-        printf("unable to create a new IoTHubMessage\r\n");
+        messageId = "<null>";
     }
-    else
+
+    if ((correlationId = IoTHubMessage_GetCorrelationId(message)) == NULL)
     {
-        if (IoTHubClient_SendEventAsync(iotHubClientHandle, messageHandle, sendCallback, (void*)(uintptr_t)messageTrackingId) != IOTHUB_CLIENT_OK)
+        correlationId = "<null>";
+    }
+
+    // AMQP message content.
+    IOTHUBMESSAGE_CONTENT_TYPE contentType = IoTHubMessage_GetContentType(message);
+
+    if (contentType == IOTHUBMESSAGE_BYTEARRAY)
+    {
+        if (IoTHubMessage_GetByteArray(message, &buffer, &size) == IOTHUB_MESSAGE_OK)
         {
-            printf("failed to hand over the message to IoTHubClient");
+            (void)printf("Received Message [%d] (message-id: %s, correlation-id: %s) with BINARY Data: <<<%.*s>>> & Size=%d\r\n", *counter, messageId, correlationId,(int)size, buffer, (int)size);
         }
         else
         {
-            printf("IoTHubClient accepted the message for delivery\r\n");
+            (void)printf("Failed getting the BINARY body of the message received.\r\n");
         }
-
-        IoTHubMessage_Destroy(messageHandle);
     }
-    free((void*)buffer);
-    messageTrackingId++;
-}
-
-static IOTHUBMESSAGE_DISPOSITION_RESULT IoTHubMessage(IOTHUB_MESSAGE_HANDLE message, void* userContextCallback)
-{
-    IOTHUBMESSAGE_DISPOSITION_RESULT result;
-    const unsigned char* buffer;
-    size_t size;
-
-    printf("Action Detected...\r\n");
-
-    if (IoTHubMessage_GetByteArray(message, &buffer, &size) != IOTHUB_MESSAGE_OK)
+    else if (contentType == IOTHUBMESSAGE_STRING)
     {
-        printf("unable to IoTHubMessage_GetByteArray\r\n");
-        result = EXECUTE_COMMAND_ERROR;
-    }
-    else
-    {
-        /*buffer is not zero terminated*/
-        char* temp = malloc(size + 1);
-        if (temp == NULL)
+        if ((buffer = (const unsigned char*)IoTHubMessage_GetString(message)) != NULL && (size = strlen((const char*)buffer)) > 0)
         {
-            printf("failed to malloc\r\n");
-            result = EXECUTE_COMMAND_ERROR;
+            (void)printf("Received Message [%d] (message-id: %s, correlation-id: %s) with STRING Data: <<<%.*s>>> & Size=%d\r\n", *counter, messageId, correlationId, (int)size, buffer, (int)size);
+
+            // If we receive the work 'quit' then we stop running
         }
         else
         {
-            memcpy(temp, buffer, size);
-            temp[size] = '\0';
-            EXECUTE_COMMAND_RESULT executeCommandResult = EXECUTE_COMMAND(userContextCallback, temp);
-            result =
-                (executeCommandResult == EXECUTE_COMMAND_ERROR) ? IOTHUBMESSAGE_ABANDONED :
-                (executeCommandResult == EXECUTE_COMMAND_SUCCESS) ? IOTHUBMESSAGE_ACCEPTED :
-                IOTHUBMESSAGE_REJECTED;
-            free(temp);
+            (void)printf("Failed getting the STRING body of the message received.\r\n");
         }
     }
-    return result;
+    else
+    {
+        (void)printf("Failed getting the body of the message received (type %i).\r\n", contentType);
+    }
+
+    if (memcmp(buffer, "quit", size) == 0)
+    {
+        g_continueRunning = false;
+    }
+
+    /* Some device specific action code goes here... */
+    printf("Switching %s the LED...\n", on ? "on" : "off");
+    digitalWrite(RED_LED_PIN, on ? HIGH : LOW);
+    on = !on;
+    (*counter)++;
+    return IOTHUBMESSAGE_ACCEPTED;
 }
 
-
-void simplesample_amqp_run(void)
+void iothub_client_sample_amqp_run(void)
 {
-    printf("SAMPLE COPIED FROM PC - LINARO\r\n");
+    IOTHUB_CLIENT_LL_HANDLE iotHubClientHandle;
+
+    g_continueRunning = true;
+    int receiveContext = 0;
+
+    (void)printf("Starting the IoTHub client sample AMQP...\r\n");
+
     if (platform_init() != 0)
     {
-        (void)printf("Failed to initialize the platform.\r\n");
+        printf("Failed to initialize the platform.\r\n");
     }
     else
     {
-        if (serializer_init(NULL) != SERIALIZER_OK)
+        if ((iotHubClientHandle = IoTHubClient_LL_CreateFromConnectionString(connectionString, AMQP_Protocol)) == NULL)
         {
-            (void)printf("Failed on serializer_init\r\n");
+            (void)printf("ERROR: iotHubClientHandle is NULL!\r\n");
         }
         else
         {
-            /* Setup IoTHub client configuration */
-            IOTHUB_CLIENT_HANDLE iotHubClientHandle = IoTHubClient_CreateFromConnectionString(connectionString, AMQP_Protocol);
-            srand((unsigned int)time(NULL));
-            int avgWindSpeed = 10;
 
-            if (iotHubClientHandle == NULL)
+#ifdef MBED_BUILD_TIMESTAMP
+            // For mbed add the certificate information
+            if (IoTHubClient_LL_SetOption(iotHubClientHandle, "TrustedCerts", certificates) != IOTHUB_CLIENT_OK)
             {
-                (void)printf("Failed on IoTHubClient_Create\r\n");
+                printf("failure to set option \"TrustedCerts\"\r\n");
+            }
+#endif // MBED_BUILD_TIMESTAMP
+
+            /* Setting Message call back, so we can receive Commands. */
+            if (IoTHubClient_LL_SetMessageCallback(iotHubClientHandle, ReceiveMessageCallback, &receiveContext) != IOTHUB_CLIENT_OK)
+            {
+                (void)printf("ERROR: IoTHubClient_SetMessageCallback..........FAILED!\r\n");
             }
             else
             {
-#ifdef MBED_BUILD_TIMESTAMP
-                // For mbed add the certificate information
-                if (IoTHubClient_SetOption(iotHubClientHandle, "TrustedCerts", certificates) != IOTHUB_CLIENT_OK)
+                (void)printf("IoTHubClient_SetMessageCallback...successful.\r\n");
+
+                do
                 {
-                    (void)printf("failure to set option \"TrustedCerts\"\r\n");
-                }
-#endif // MBED_BUILD_TIMESTAMP
+                    IoTHubClient_LL_DoWork(iotHubClientHandle);
+                    ThreadAPI_Sleep(1);
+                } while (g_continueRunning);
 
-                ContosoAnemometer* myWeather = CREATE_MODEL_INSTANCE(WeatherStation, ContosoAnemometer);
-                if (myWeather == NULL)
-                {
-                    (void)printf("Failed on CREATE_MODEL_INSTANCE\r\n");
-                }
-                else
-                {
-                    unsigned char* destination;
-                    size_t destinationSize;
-
-                    if (IoTHubClient_SetMessageCallback(iotHubClientHandle, IoTHubMessage, myWeather) != IOTHUB_CLIENT_OK)
-                    {
-                        printf("unable to IoTHubClient_SetMessageCallback\r\n");
-                    }
-                    else
-                    {
-                        int Lock_fd = open_lockfile(LOCKFILE);
-                        if (setuid(getuid()) < 0)
-                        {
-                            perror("Dropping privileges failed. (did you use sudo?)\n");
-                            exit(EXIT_FAILURE);
-                        }
-
-                        int result = 1;
-                        //int result = wiringPiSetup();
-                        //if (result != 0) exit(result);
-
-                        //int Spi_fd = wiringPiSPISetup(Spi_channel, Spi_clock);
-                        //if (Spi_fd < 0)
-                        //{
-                        //    printf("Can't setup SPI, error %i calling wiringPiSPISetup(%i, %i)  %s\n",
-                        //        Spi_fd, Spi_channel, Spi_clock, strerror(Spi_fd));
-                        //    exit(Spi_fd);
-                        //}
-
-                        //int Init_result = bme280_init(Spi_channel);
-                        //if (Init_result != 1)
-                        //{
-                        //    printf("It appears that no BMP280 module on Chip Enable %i is attached. Aborting.\n", Spi_channel);
-                        //    exit(1);
-                        //}
-
-                        //pinMode(Red_led_pin, OUTPUT);
-                        //pinMode(Grn_led_pin, OUTPUT);
-
-                        ////////////////
-
-
-                        // Read the Temp & Pressure module.
-                        float tempC = -300.0;
-                        float pressurePa = -300;
-                        float humidityPct = -300;
-                        //result = bme280_read_sensors(&tempC, &pressurePa, &humidityPct);
-
-                        //if (result == 1)
-                        //{
-                        //    printf("Temperature = %.1f *C  Pressure = %.1f Pa  Humidity = %1f %%\n",
-                        //        tempC, pressurePa, humidityPct);
-                        //}
-                        //else
-                        //{
-                        //    printf("Unable to read BME280 on pin %i\n", Spi_channel);
-                        //}
-
-                        char buff[11];
-                        int timeNow = 0;
-
-                        int c;
-                        while (1)
-                        {
-                            timeNow = (int)time(NULL);
-
-                            sprintf(buff, "%d", timeNow);
-
-                            myWeather->DeviceId = "raspy";
-                            myWeather->EventTime = buff;
-
-                            if (result == 1)
-                            {
-                                myWeather->MTemperature = 20;//tempC;
-                                printf("Humidity = %.1f%% Temperature = %.1f*C \n", humidityPct, tempC);
-                            }
-                            else
-                            {
-                                //myWeather->MTemperature = 404.0;
-                                //printf("Unable to read BME280 on pin %i\n", Spi_channel);
-                                //pinMode(Red_led_pin, OUTPUT);
-                            }
-
-
-                            if (SERIALIZE(&destination, &destinationSize, myWeather->DeviceId, myWeather->EventTime, myWeather->MTemperature) != IOT_AGENT_OK)
-                            {
-                                (void)printf("Failed to serialize\r\n");
-                            }
-                            else
-                            {
-                                sendMessage(iotHubClientHandle, destination, destinationSize);
-                            }
-
-                            delay(5000);
-                        }
-                        /* wait for commands */
-                      // (void)getchar();
-
-                        close_lockfile(Lock_fd);
-
-                    }
-                    DESTROY_MODEL_INSTANCE(myWeather);
-                }
-                IoTHubClient_Destroy(iotHubClientHandle);
             }
-            serializer_deinit();
+            IoTHubClient_LL_Destroy(iotHubClientHandle);
         }
-	}
-}
-
-int mcp3008Read(int analog_in_channel)
-{
-    int result;
-    
-    if ((analog_in_channel > 7) || (analog_in_channel < 0)) 
-    {
-        result = -1;
+        platform_deinit();
     }
-    else
-    {
-        // Send the convert command and channel to the chip.
-        // Simultaneously read back two bytes from the chip.
-        unsigned char buf[3];
-        // Start bit.
-        buf[0] = 0x01;
-        // Bit 7 = single-ended, Bits 6-4 = channel.
-        buf[1] = (0x80 + (analog_in_channel << 4));
-        buf[2] = 0;
-        result = wiringPiSPIDataRW(Spi_channel, buf, 3);
-        if (result >= 0)
-        {
-            // Extract the relevant 10 bits.
-            result = ((buf[1] & 3) << 8) + buf[2];
-        }
-    }
-	return result;
 }
 
 int main(void)
 {
-    simplesample_amqp_run();
-
+    wiringPiSetup();
+    iothub_client_sample_amqp_run();
     return 0;
 }
