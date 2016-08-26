@@ -8,7 +8,7 @@ var unzip = require('gulp-unzip');
 var fs = require('fs');
 
 var config = null;
-var SAMPLE_NAME = 'az-blink-happiest';
+var SAMPLE_NAME = 'az-blink';
 var TOOLS_FOLDER = (process.platform === 'linux' ? process.env['HOME'] : '') + '/vsc-iot-tools';
 var PREBUILT_FOLDER = TOOLS_FOLDER + '/prebuilt-libs';
 var PREBUILT_SDK_REPO = 'https://github.com/zikalino/az-iot-sdk-prebuilt.git';
@@ -63,6 +63,17 @@ gulp.task('install-tools', function () {
 });
 
 gulp.task('build', function() {
+  /*  String containing Hostname, Device Id & Device Key in the format:                       */
+  /*  "HostName=<host_name>;DeviceId=<device_id>;SharedAccessKey=<device_key>"                */
+  /*  "HostName=<host_name>;DeviceId=<device_id>;SharedAccessSignature=<device_sas_token>"    */
+  var connectionString = 'HostName=' + config.iot_hub_host_name + ';DeviceId=' + config.iot_hub_device_id + ';SharedAccessKey=' + config.iot_hub_shared_access_key;
+  var headerContent = 'static const char* connectionString = ' + '"' + connectionString + '"' + ';';
+  if (fs.existsSync( './config.h' )){
+    // the content of config.h is generated from config.json
+    fs.writeFileSync('./config.h', headerContent);
+  }else {
+    console.log('config file does not exist');
+  }
   var toolchain = '';
 
   // check if toolchain is installed

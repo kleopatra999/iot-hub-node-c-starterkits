@@ -17,17 +17,12 @@
 #include "certs.h"
 #endif // MBED_BUILD_TIMESTAMP
 
-/*String containing Hostname, Device Id & Device Key in the format:                         */
-/*  "HostName=<host_name>;DeviceId=<device_id>;SharedAccessKey=<device_key>"                */
-/*  "HostName=<host_name>;DeviceId=<device_id>;SharedAccessSignature=<device_sas_token>"    */
-static const char* connectionString = "";
+#include "config.h"
 
 static int callbackCounter;
-static bool g_continueRunning;
+static bool continueRunning;
 static char msgText[1024];
 static char propText[1024];
-#define MESSAGE_COUNT       5
-#define DOWORK_LOOP_NUM     3
 
 const int RED_LED_PIN = 7;
 bool on = 1;
@@ -91,7 +86,7 @@ static IOTHUBMESSAGE_DISPOSITION_RESULT ReceiveMessageCallback(IOTHUB_MESSAGE_HA
 
     if (memcmp(buffer, "quit", size) == 0)
     {
-        g_continueRunning = false;
+        continueRunning = false;
     }
 
     /* Some device specific action code goes here... */
@@ -106,7 +101,7 @@ void iothub_client_sample_amqp_run(void)
 {
     IOTHUB_CLIENT_LL_HANDLE iotHubClientHandle;
 
-    g_continueRunning = true;
+    continueRunning = true;
     int receiveContext = 0;
 
     (void)printf("Starting the IoTHub client sample AMQP...\r\n");
@@ -145,7 +140,7 @@ void iothub_client_sample_amqp_run(void)
                 {
                     IoTHubClient_LL_DoWork(iotHubClientHandle);
                     ThreadAPI_Sleep(1);
-                } while (g_continueRunning);
+                } while (continueRunning);
 
             }
             IoTHubClient_LL_Destroy(iotHubClientHandle);
