@@ -9,7 +9,7 @@ var fs = require('fs');
 
 var config = null;
 var SAMPLE_NAME = 'blink';
-var TOOLS_FOLDER = '/vsc-iot-tools';
+var TOOLS_FOLDER = (process.platform === 'linux' ? process.env['HOME'] : '') + '/vsc-iot-tools';
 var PREBUILT_FOLDER = TOOLS_FOLDER + '/prebuilt-libs';
 var PREBUILT_SDK_REPO = 'https://github.com/zikalino/az-iot-sdk-prebuilt.git';
 var COMPILER_NAME = (process.platform == 'win32' ?
@@ -19,7 +19,7 @@ var COMPILER_FOLDER = TOOLS_FOLDER + '/' + COMPILER_NAME + '/bin';
 
 readConfig();
 
-gulp.task('tools-install', function () {
+gulp.task('install-tools', function () {
 
   // make sure tools folder exists
   if (!folderExists(TOOLS_FOLDER))
@@ -55,6 +55,7 @@ gulp.task('tools-install', function () {
       runCmd('sudo apt-get -y install lib32z1');
     }
         
+    // update toolchain in config if everything completed successfully
     updateToolchain('arm-linux-gnueabihf');
   } else {
     console.log('We dont have tools for your operating system at this time');
@@ -127,7 +128,7 @@ var ssh = new simssh({
     });
 
 gulp.task('run', function () {
-  ssh.exec('chmod +x ./'+ SAMPLE_NAME + ' & sudo ./' + SAMPLE_NAME, {
+  ssh.exec('sudo chmod +x ./'+ SAMPLE_NAME + ' & sudo ./' + SAMPLE_NAME, {
     pty: true,
     out: console.log.bind(console)
   }).start();
