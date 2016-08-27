@@ -6,7 +6,7 @@ var request = require('request');
 var source = require('vinyl-source-stream');
 var unzip = require('gulp-unzip');
 var fs = require('fs');
-
+var Q = require('Q');
 var config = null;
 var SAMPLE_NAME = 'az-blink';
 var TOOLS_FOLDER = (process.platform === 'linux' ? process.env['HOME'] : '') + '/vsc-iot-tools';
@@ -18,6 +18,12 @@ var COMPILER_NAME = (process.platform == 'win32' ?
 var COMPILER_FOLDER = TOOLS_FOLDER + '/' + COMPILER_NAME + '/bin';
 
 readConfig();
+
+var ssh = new simssh({
+      host: config.device_ip_address,
+      user: config.device_user_name,
+      pass: config.device_password
+    });
 
 gulp.task('install-tools', function () {
 
@@ -128,18 +134,31 @@ gulp.task('build', function() {
   }
 });
 
-gulp.task('deploy', function(){
+gulp.task('check-raspbian', function() {
+  var deferred = Q.defer();
+
+  ssh.exec('uname -a', {
+    pty: true,
+    out: function (out) {
+      if (!out.startsWith('Linux raspberrypi 4.4')) {
+        console.log('--------------------');
+        console.log('WARNING: Unsupported OS version - sample code may not work properly');
+        console.log(out);
+        console.log('--------------------');
+      }
+      deferred.resolve();
+    }
+  }).start();
+
+  return deferred.promise;
+})
+
+gulp.task('deploy', ['check-raspbian'], function(){
   uploadFiles(config, ['out/' + SAMPLE_NAME], ['./' + SAMPLE_NAME]);
 });
 
-var ssh = new simssh({
-      host: config.device_ip_address,
-      user: config.device_user_name,
-      pass: config.device_password
-    });
-
 gulp.task('run', function () {
-  ssh.exec('sudo chmod +x ./'+ SAMPLE_NAME + ' & sudo ./' + SAMPLE_NAME, {
+  ssh.exec('sudo chmod +x ./'+ SAMPLE_NAME + ' ; sudo ./' + SAMPLE_NAME, {
     pty: true,
     out: console.log.bind(console)
   }).start();
