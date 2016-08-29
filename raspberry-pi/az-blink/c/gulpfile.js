@@ -6,7 +6,7 @@ var request = require('request');
 var source = require('vinyl-source-stream');
 var unzip = require('gulp-unzip');
 var fs = require('fs');
-var Q = require('Q');
+var Q = require('q');
 var config = null;
 var SAMPLE_NAME = 'az-blink';
 var TOOLS_FOLDER = (process.platform === 'linux' ? process.env['HOME'] : '') + '/vsc-iot-tools';

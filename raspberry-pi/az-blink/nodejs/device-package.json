@@ -1,0 +1,21 @@
+{
+  "name": "rpi-nodejs-az-blink",
+  "version": "0.0.1",
+  "description": "Blinking LED implementation with Node.js and IoT Hub for Raspberry Pi. The device is listening for cloud-to-device messages. The LED state will be changed when the device get a message.",
+  "main": "az-blink.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git"
+  },
+  "keywords": [
+    "IoT Hub",
+    "Raspberry Pi"
+  ],
+  "dependencies": {
+    "azure-iot-device-amqp": "^1.0.10",
+    "wiring-pi": ">=2.1.1"
+  },
+  "author": "Zhao, Dong <donzh@microsoft.com>"
+}

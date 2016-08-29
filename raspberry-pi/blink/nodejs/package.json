@@ -1,20 +1,23 @@
 {
-  "name": "rpi-nodejs-blink",
-  "version": "0.0.1",
-  "description": "Blinking LED implementation with Node.js for Raspberry Pi using wiringpi.",
-  "main": "blink.js",
+  "name": "master-cli",
+  "version": "1.0.0",
+  "description": "Master CLI for Azure IoT Stuff",
+  "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "repository": {
-    "type": "git"
-  },
-  "keywords": [
-    "IoT",
-    "Raspberry Pi"
-  ],
-  "dependencies": {
-    "wiring-pi": ">=2.1.1"
-  },
-  "author": "Zhao, Dong <donzh@microsoft.com>"
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {    
+    "az-iot-helper": "^0.1.1",
+    "gulp": "^3.9.1",
+    "gulp-rsync": "0.0.6",
+    "gulp-run": "^1.7.1",
+    "gulp-shell": "^0.5.2",
+    "gulp-unzip": "^0.1.4",
+    "q": "^1.4.1",
+    "request": "^2.74.0",
+    "simple-ssh": "^0.9.0",
+    "vinyl-source-stream": "^1.1.0"
+  }
 }

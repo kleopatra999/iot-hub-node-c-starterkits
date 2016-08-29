@@ -19,7 +19,7 @@ gulp.task('install-tools', function () {
 });
 
 gulp.task('deploy', function(){
-  uploadFiles(config, ["./blink.js", "./package.json"], ["./blink.js", "./package.json"], function(){
+  uploadFiles(config, ["./blink.js", "./device-package.json"], ["./blink.js", "./package.json"], function(){
     ssh.exec('npm install', {
       pty: true,
       out: console.log.bind(console)

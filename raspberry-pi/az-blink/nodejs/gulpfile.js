@@ -19,7 +19,7 @@ gulp.task('install-tools', function () {
 });
 
 gulp.task('deploy', function(){
-  uploadFiles(config, ['az-blink.js', 'package.json', 'config.json'], ['az-blink.js', 'package.json', 'config.json'], function(){
+  uploadFiles(config, ['az-blink.js', 'device-package.json', 'config.json'], ['az-blink.js', 'package.json', 'config.json'], function(){
     ssh.exec('npm install', {
       pty: true,
       out: console.log.bind(console)
