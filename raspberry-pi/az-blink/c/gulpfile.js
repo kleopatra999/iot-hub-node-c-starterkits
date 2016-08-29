@@ -154,7 +154,11 @@ gulp.task('check-raspbian', function() {
 })
 
 gulp.task('deploy', ['check-raspbian'], function(){
-  uploadFiles(config, ['out/' + SAMPLE_NAME], ['./' + SAMPLE_NAME]);
+  var deferred = Q.defer();
+  
+  uploadFiles(config, ['out/' + SAMPLE_NAME], ['./' + SAMPLE_NAME], function(){deferred.resolve();});
+  
+  return deferred.promise;
 });
 
 gulp.task('run', function () {

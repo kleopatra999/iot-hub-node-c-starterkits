@@ -2,6 +2,7 @@ var config = require('./config.json');
 var gulp = require('gulp');
 var simssh = require('simple-ssh');
 var uploadFiles = require('az-iot-helper').uploadFiles;
+var Q = require('q');
 
 var ssh = new simssh({
   host: config.device_ip_address,
@@ -19,12 +20,18 @@ gulp.task('install-tools', function () {
 });
 
 gulp.task('deploy', function(){
+  var deferred = Q.defer();
+      
   uploadFiles(config, ["./blink.js", "./device-package.json"], ["./blink.js", "./package.json"], function(){
+    console.log("- Installing npm packages on device");
+    
     ssh.exec('npm install', {
       pty: true,
-      out: console.log.bind(console)
+      exit: function() { deferred.resolve(); }
     }).start();
   });
+  
+  return deferred.promise;
 });
 
 gulp.task('run', function () {
